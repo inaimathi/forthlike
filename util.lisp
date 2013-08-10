@@ -17,6 +17,5 @@
     (if (and int (/= end (length str)) (eq #\. (aref str end)))
 	(ignore-errors
 	  (multiple-value-bind (float f-end) (parse-integer str :start (+ end 1))
-	    (format t "~a :: ~a ~a >> ~a" float end f-end (- f-end end 1))
 	    (+ int (float (/ float (expt 10 (- f-end end 1)))))))
 	int)))

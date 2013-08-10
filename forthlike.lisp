@@ -39,6 +39,7 @@
 (def "\"" (push! (format nil "~s" (pull! "\""))))
 
 (def "dup" (push! (first *stack*)))
+(def "swap" (rotatef (first *stack*) (second *stack*)))
 
 (def "+" (push! (+ (pop!) (pop!))))
 (def "*" (push! (* (pop!) (pop!))))
@@ -47,6 +48,7 @@
 
 (def "=" (push! (bif (equal (pop!) (pop!)))))
 (def ">" (push! (bif (with-pop (b) (> (pop!) b)))))
+(def "<" (push! (bif (with-pop (b) (< (pop!) b)))))
 (def "not" (push! (if (string= (pop!) "false") "true" "false")))
 (def "and" (push! (with-pop! (a b) (bif (and (string= "true" a) (string= "true" b))))))
 (def "or" (push! (with-pop! (a b) (bif (or (string= "true" a) (string= "true" b))))))

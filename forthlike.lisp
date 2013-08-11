@@ -6,7 +6,7 @@
 
 (defun pull! (&optional (looking-for #\ ))
   (multiple-value-bind (word len) (split-sequence looking-for *input* :count 1)
-    (setf *input* (subseq *input* len))
+    (setf *input* (string-left-trim " " (subseq *input* len)))
     (first word)))
 
 (defun pop! () (pop *stack*))
@@ -36,7 +36,7 @@
 
 (def "`" (push! (pull!)))
 (def "," (funcall (gethash (pop!) *words*)))
-(def "\"" (push! (format nil "~s" (pull! "\""))))
+(def "\"" (push! (format nil "~s" (pull! #\"))))
 
 (def "dup" (push! (first *stack*)))
 (def "swap" (rotatef (first *stack*) (second *stack*)))
@@ -52,9 +52,9 @@
 (def "not" (push! (if (string= (pop!) "false") "true" "false")))
 (def "and" (push! (with-pop! (a b) (bif (and (string= "true" a) (string= "true" b))))))
 (def "or" (push! (with-pop! (a b) (bif (or (string= "true" a) (string= "true" b))))))
-(def "if" (if (string= (pop!) "true")
-	      (with-pop! (a) (pop!) (ev a))
-	      (progn (pop!) (ev (pop!)))))
+(def "if" (let ((true? (string= (pop!) "true")))
+	    (loop for wd = (pull!) until (string= wd "then") 
+	       when true? do (ev wd))))
 
 (def ":" (let ((name (pull!))
 	       (words (loop for wd = (pull!) until (string= wd ";") collect wd)))

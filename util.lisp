@@ -2,7 +2,7 @@
 
 (defun println (thing) (format t "~a~%" thing))
 
-(defmacro aif (test if-true if-false)
+(defmacro aif (test if-true &optional if-false)
   `(let ((it ,test))
      (if it ,if-true ,if-false)))
 

@@ -1,13 +1,23 @@
 (in-package #:forthlike)
 
+;;; Types of things:
+;;; numbers, symbols, streams, functions
+;;; - ints and floats are numbers
+;;; - strings, lists, etc are streams
+;;; - lambdas are functions
+;;; - anything else is a symbol (if a symbol is assigned, it evaluates to its value, otherwise it evaluates to itself)
+;;; - booleans are symbols (yes, that means you can re-assign :true and :false. It's dumb, but you can)
+;;; - should hashes be their own thing, or can they be represented as streams?
+
 (defparameter *stack* nil)
 (defparameter *words* (make-hash-table :test #'equal))
-(defparameter *input* "")
+(defparameter *input* (make-string-input-stream ""))
 
 (defun pull! (&optional (looking-for #\ ))
-  (multiple-value-bind (word len) (split-sequence looking-for *input* :count 1)
-    (setf *input* (string-left-trim " " (subseq *input* len)))
-    (first word)))
+  (loop for c = (read-char *input* nil :eof)
+     until (or (eq c looking-for) (eq c :eof)) 
+     collect c into word
+     finally (return (values (when word (coerce word 'string)) c))))
 
 (defun pop! () (pop *stack*))
 
@@ -34,9 +44,9 @@
       (format t "< Empty stack >~%"))
   (println ""))
 
-(def "`" (push! (pull!)))
+(def "'" (push! (pull!)))
 (def "," (funcall (gethash (pop!) *words*)))
-(def "\"" (push! (format nil "~s" (pull! #\"))))
+(def "\"" (push! (format nil "~s" (aif (pull! #\") it ""))))
 
 (def "dup" (push! (first *stack*)))
 (def "swap" (rotatef (first *stack*) (second *stack*)))
@@ -60,9 +70,14 @@
 	       (words (loop for wd = (pull!) until (string= wd ";") collect wd)))
 	   (def name (mapc #'ev words))))
 
+
 (defun forthlike-eval (str)
-  (setf *input* str)
-  (loop until (string= *input* "") do (ev (pull!))))
+  (setf *input* (make-string-input-stream str))
+  (loop do (multiple-value-bind (word ends-with) (pull!)
+	     (when word 
+	       (ev word)
+	       (peek-char t *input* nil :eof))
+	     (when (eq :eof ends-with) (return)))))
 
 (defun forthlike-load (file-path)
   (with-open-file (s file-path)

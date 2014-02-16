@@ -1,90 +1,98 @@
 (in-package #:forthlike)
 
-;;; Types of things:
-;;; numbers, symbols, streams, functions
-;;; - ints and floats are numbers
-;;; - strings, lists, etc are streams
-;;; - lambdas are functions
-;;; - anything else is a symbol (if a symbol is assigned, it evaluates to its value, otherwise it evaluates to itself)
-;;; - booleans are symbols (yes, that means you can re-assign :true and :false. It's dumb, but you can)
-;;; - should hashes be their own thing, or can they be represented as streams?
+(defparameter *words* (make-instance 'dqueue))
 
-(defparameter *stack* nil)
-(defparameter *words* (make-hash-table :test #'equal))
-(defparameter *input* (make-string-input-stream ""))
+(defmethod print-stack ((q dqueue))
+  (format t "(~a) < " (len q))
+  (loop for wd in (messages q)
+     do (print-word wd) do (format t " "))
+  (format t ">~%"))
 
-(defun pull! (&optional (looking-for #\ ))
-  (loop for c = (read-char *input* nil :eof)
-     until (or (eq c looking-for) (eq c :eof)) 
-     collect c into word
-     finally (return (values (when word (coerce word 'string)) c))))
+(defmethod pull! ((looking-for list) (s stream))
+  (loop for c = (read-char s nil :eof)
+     until (or (member c looking-for) (eq c :eof)) collect c into word
+     finally (return (values (coerce word 'string) c))))
 
-(defun pop! () (pop *stack*))
+(defmethod pull! ((looking-for character) (s stream))
+  (loop for c = (read-char s nil :eof)
+     until (or (eql c looking-for) (eq c :eof)) collect c into word
+     finally (return (values (coerce word 'string) c))))
 
-(defun push! (thing) (push thing *stack*))
+(defmethod pull-word! ((s stream)) (pull! (list #\space #\newline) s))
 
-(defun ev (word)
-  (if (or (string= "true" word) (string= "false" word))
-      (push! word)
-      (aif (parse-num word)
-	   (push! it)
-	   (aif (gethash word *words*)
-		(funcall it)
-		(format t "Unknown word: ~s~%" word)))))
+(defmethod intern! ((dict dqueue) (name string) value)
+  (push! (list (intern name :keyword) value) dict))
 
-(defmacro def (name &body body)
-  `(setf (gethash ,name *words*) (lambda () ,@body)))
+(defmethod lookup ((dict dqueue) (word string))
+  (second (assoc (intern word :keyword) (messages dict))))
 
-(def "." (println (pop!)))
-(def ".s"
-  (println "")
-  (if *stack*
-      (loop for i from 0 for elem in *stack*
-	 do (format t "< ~a > :: ~a~%" i elem))
-      (format t "< Empty stack >~%"))
-  (println ""))
+(defmethod numeric? ((str string))
+  (loop for c across str
+     unless (> 58 (char-code c) 47) do (return nil)
+     finally (return t)))
 
-(def "'" (push! (pull!)))
-(def "," (funcall (gethash (pop!) *words*)))
-(def "\"" (push! (format nil "~s" (aif (pull! #\") it ""))))
+(defmethod parse-word ((dict dqueue) (word string))
+  (cond ((numeric? word) (parse-integer word :junk-allowed t))
+	(t (let ((wd (lookup dict word)))
+	     (unless wd (format t "Undefined '~a'~%" word))
+	     wd))))
 
-(def "dup" (push! (first *stack*)))
-(def "swap" (rotatef (first *stack*) (second *stack*)))
+(defmethod print-word (word) (format t "~s" word))
 
-(def "+" (push! (+ (pop!) (pop!))))
-(def "*" (push! (* (pop!) (pop!))))
-(def "/" (with-pop! (b) (push! (/ (pop!) b))))
-(def "-" (with-pop! (b) (push! (- (pop!) b))))
+(defmethod eval-word ((dict dqueue) (stack dqueue) (in stream) word)
+  (push! word stack))
 
-(def "=" (push! (bif (equal (pop!) (pop!)))))
-(def ">" (push! (bif (with-pop (b) (> (pop!) b)))))
-(def "<" (push! (bif (with-pop (b) (< (pop!) b)))))
-(def "not" (push! (if (string= (pop!) "false") "true" "false")))
-(def "and" (push! (with-pop! (a b) (bif (and (string= "true" a) (string= "true" b))))))
-(def "or" (push! (with-pop! (a b) (bif (or (string= "true" a) (string= "true" b))))))
-(def "if" (let ((true? (string= (pop!) "true")))
-	    (loop for wd = (pull!) until (string= wd "then") 
-	       when true? do (ev wd))))
+(defmethod eval-word ((dict dqueue) (stack dqueue) (in stream) (word null)) t)
 
-(def ":" (let ((name (pull!))
-	       (words (loop for wd = (pull!) until (string= wd ";") collect wd)))
-	   (def name (mapc #'ev words))))
+(defmethod eval-word ((dict dqueue) (stack dqueue) (in stream) (word function))
+  (funcall word dict stack in))
 
+(define-primitives
+  "bye" (fn ())
+  "." (fn () (print-word (pop! stack)) (format t "~%"))
+  ".s" (fn () (print-stack stack))
+  
+  "true" :true
+  "false" :false
+  
+  "dup" (fn () (push! (first (messages stack)) stack))
+  "swap" (fn () (rotatef (first (messages stack)) 
+			 (second (messages stack))))
+  
+  "'" (fn () (push! (pull-word! in) stack))
+  "eval" (fn () (eval-word dict stack in (parse-word dict (pop! stack))))
+  
+  "\"" (fn () (push! (pull! #\" in) stack))
+  
+  "+" (fn () (push! (+ (pop! stack) (pop! stack)) stack))
+  "*" (fn () (push! (* (pop! stack) (pop! stack)) stack))
+  "/" (fn () (push! (/ (pop! stack) (pop! stack)) stack))
+  "-" (fn () (push! (- (pop! stack) (pop! stack)) stack))
+  
+  "=" (fn () (push! (if (equal (pop! stack) (pop! stack)) :true :false)
+		    stack))
+  ">" (fn () (push! (if (> (pop! stack) (pop! stack)) :true :false)
+		    stack))
+  "<" (fn () (push! (if (< (pop! stack) (pop! stack)) :true :false)
+		    stack))
+  
+  "not" (fn () (push! (if (eq :false (pop! stack)) :true :false) stack))
+  "and" (fn () (push! (if (and (eq :true (pop! stack)) (eq :true (pop! stack))) :true :false) stack))
+  "or" (fn () (push! (if (or (eq :true (pop! stack)) (eq :true (pop! stack))) :true :false) stack))
 
-(defun forthlike-eval (str)
-  (setf *input* (make-string-input-stream str))
-  (loop do (multiple-value-bind (word ends-with) (pull!)
-	     (when word 
-	       (ev word)
-	       (peek-char t *input* nil :eof))
-	     (when (eq :eof ends-with) (return)))))
-
-(defun forthlike-load (file-path)
-  (with-open-file (s file-path)
-    (loop for res = (read-line s nil :eof)
-       until (eq res :eof)
-	 do (forthlike-eval res))))
+  "if" (fn () (let ((true? (eq (pop! stack) :true)))
+		(loop for wd = (pull-word! in) until (string= wd "then")
+		   when true? do (eval-word dict stack in (parse-word dict wd)))))
+  
+  ":" (fn () (let ((name (pull-word! in))
+		   (words (loop for wd = (pull-word! in) until (string= wd ";") collect (parse-word dict wd))))
+	       (intern! dict name (fn () (mapc (lambda (w) (eval-word dict stack in w)) words))))))
 
 (defun repl ()
-  (loop for line = (progn (format t "~~4th >> ") (read-line)) 
-     until (string= line "bye") do (forthlike-eval line)))
+  (let ((stack (make-instance 'dqueue)))
+    (loop do (format t "~~4>> ")
+       while (multiple-value-bind (wd last-char)
+		 (pull! (list #\space #\newline) *standard-input*)
+	       (unless (eql last-char :eof)
+		 (eval-word *words* stack *standard-input*
+			    (parse-word *words* wd)))))))

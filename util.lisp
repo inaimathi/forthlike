@@ -1,16 +1,15 @@
 (in-package :forthlike)
 
-(defun println (thing) (format t "~a~%" thing))
+(defmacro fn ((&rest args) &body body)
+  (declare (ignore args))
+  `(lambda (dict stack in)
+     (declare (ignorable dict stack in))
+     ,@body
+     ,(when body t)))
 
-(defmacro aif (test if-true &optional if-false)
-  `(let ((it ,test))
-     (if it ,if-true ,if-false)))
-
-(defmacro bif (test) `(if ,test "true" "false"))
-
-(defmacro with-pop! ((&rest symbols) &body body)
-  `(let ,(loop for s in symbols collect `(,s (pop!)))
-     ,@body))
+(defmacro define-primitives (&rest name/def-list)
+  `(progn ,@(loop for (name def) on name/def-list by #'cddr
+	       collect `(intern! *words* ,name ,def))))
 
 (defun parse-num (str)
   (multiple-value-bind (int end) (parse-integer str :junk-allowed t)

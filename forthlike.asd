@@ -8,5 +8,6 @@
   :depends-on (#:split-sequence)
   :components ((:file "package")
 	       (:file "util")
+	       (:file "dqueue")
                (:file "forthlike")))
 

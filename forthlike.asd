@@ -5,7 +5,7 @@
   :description "Describe forthlike here"
   :author "Your Name <your.name@example.com>"
   :license "Specify license here"
-  :depends-on (#:split-sequence)
+  :depends-on (#:alexandria #:anaphora)
   :components ((:file "package")
 	       (:file "util")
 	       (:file "dqueue")

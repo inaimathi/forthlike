@@ -1,6 +1,7 @@
 ;;;; package.lisp
 
 (defpackage #:forthlike
-  (:use #:cl #:split-sequence)
-  (:export #:repl #:forthlike-eval #:def #:env))
+  (:use #:cl)
+  (:import-from #:alexandria #:with-gensyms)
+  (:import-from #:anaphora #:awhen #:aif #:it))
 

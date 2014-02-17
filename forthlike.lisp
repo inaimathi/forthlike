@@ -45,44 +45,38 @@
 
 (define-primitives
   "bye" (fn () (error (make-instance 'repl-break)))
-  "." (fn (1) (print-word (pop! stack)) (ln))
+  "." (fn (wd) (print-word wd) (ln))
   ".s" (fn () (print-stack stack) (ln))
   
   "true" t
   "false" nil
   
-  "dup" (fn (1) (push! (first (messages stack)) stack))
-  "swap" (fn (2) (rotatef (first (messages stack)) 
-			 (second (messages stack))))
+  "dup" (fn (a) (push! a stack) (push! a stack))
+  "swap" (fn (a b)
+	   (push! a stack)
+	   (push! b stack))
   
   "'" (fn () (push! (pull-word! in) stack))
-  "eval" (fn (1) (eval-word dict stack in (parse-word dict (pop! stack))))
+  "eval" (fn (wd) (eval-word dict stack in (parse-word dict wd)))
   
   "\"" (fn () (push! (pull! #\" in) stack))
   
-  "+" (fn (number number) (push! (+ (pop! stack) (pop! stack)) stack))
-  "*" (fn (number number) (push! (* (pop! stack) (pop! stack)) stack))
-  "/" (fn (number number) (push! (/ (pop! stack) (pop! stack)) stack))
-  "-" (fn (number number) (push! (- (pop! stack) (pop! stack)) stack))
+  "+" (fn ((a number) (b number)) (push! (+ a b) stack))
+  "*" (fn ((a number) (b number)) (push! (* a b) stack))
+  "/" (fn ((a number) (b number)) (push! (/ a b) stack))
+  "-" (fn ((a number) (b number)) (push! (- a b) stack))
   
-  "=" (fn (2) 
-	(push! (equal (pop! stack) (pop! stack)) stack))
-  ">" (fn (number number) 
-	(push! (> (pop! stack) (pop! stack)) stack))
-  "<" (fn (number number)
-	(push! (< (pop! stack) (pop! stack)) stack))
+  "=" (fn (a b) (push! (equal a b) stack))
+  ">" (fn ((a number) (b number)) (push! (> a b) stack))
+  "<" (fn ((a number) (b number)) (push! (< a b) stack))
   
-  "not" (fn (boolean) 
-	  (push! (not (pop! stack)) stack))
-  "and" (fn (boolean boolean)
-	  (push! (every #'identity (list (pop! stack) (pop! stack))) stack))
-  "or" (fn (boolean boolean) 
-	 (push! (some #'identity (list (pop! stack) (pop! stack))) stack))
+  "not" (fn ((a boolean)) (push! (not a) stack))
+  "and" (fn ((a boolean) (b boolean)) (push! (and a b) stack))
+  "or" (fn ((a boolean) (b boolean)) (push! (or a b) stack))
 
-  "if" (fn (boolean)
-	 (let ((true? (pop! stack)))
-	   (loop for wd = (pull-word! in) until (string= wd "then")
-	      when true? do (eval-word dict stack in (parse-word dict wd)))))
+  "if" (fn ((true? boolean))
+	 (loop for wd = (pull-word! in) until (string= wd "then")
+	    when true? do (eval-word dict stack in (parse-word dict wd))))
   
   ":" (fn () 
 	(let ((name (pull-word! in))

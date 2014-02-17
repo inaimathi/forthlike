@@ -10,26 +10,25 @@
 (defun ln (&optional (stream *standard-output*))
   (write-char #\newline stream))
 
-(defun fn-argcount (arg-checks)
-  (when arg-checks
-    `((unless (>= (len stack) 
-		  ,(if (numberp (first arg-checks)) 
-		       (first arg-checks)
-		       (length arg-checks)))
-	(error (make-instance 'stack-underflow))))))
-
 (defun fn-argcheck (arg-checks)
-  (unless (or (null arg-checks) (numberp (first arg-checks)))
+  (when (some #'identity arg-checks)
     (with-gensyms (elem tp)
       `((loop for ,tp in '(,@arg-checks) for ,elem in (messages stack)
-	   unless (typep ,elem ,tp) do (error (make-instance 'unexpected-type)))))))
+	   when (and ,tp (not (typep ,elem ,tp)))
+	   do (error (make-instance 'unexpected-type)))))))
 
-(defmacro fn ((&rest arg-checks) &body body)
-  `(lambda (dict stack in)
-     (declare (ignorable dict stack in))
-     ,@(fn-argcount arg-checks)
-     ,@(fn-argcheck arg-checks)
-     ,@body))
+(defmacro fn ((&rest args) &body body)
+  (let ((arg-names (loop for a in args collect (if (listp a) (car a) a)))
+	(types (loop for a in args collect (when (listp a) (second a)))))
+    `(lambda (dict stack in)
+       (declare (ignorable dict stack in))
+       (unless (>= (len stack) ,(length args)) (error (make-instance 'stack-underflow)))
+       ,@(fn-argcheck types)
+       ,@(if args
+	     `((let ,(loop for a in arg-names
+			collect `(,a (pop! stack)))
+		 ,@body))
+	     body))))
 
 (defmacro define-primitives (&rest name/def-list)
   `(progn ,@(loop for (name def) on name/def-list by #'cddr

@@ -7,7 +7,7 @@
   :license "Specify license here"
   :depends-on (#:alexandria #:anaphora)
   :components ((:file "package")
-	       (:file "util")
 	       (:file "dqueue")
+	       (:file "util")
                (:file "forthlike")))
 

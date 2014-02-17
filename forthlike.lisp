@@ -2,12 +2,6 @@
 
 (defparameter *words* (make-instance 'dqueue))
 
-(defmethod print-stack ((q dqueue))
-  (format t "(~a) < " (len q))
-  (loop for wd in (messages q)
-     do (print-word wd) do (format t " "))
-  (format t ">~%"))
-
 (defmethod pull! ((looking-for list) (s stream))
   (loop for c = (read-char s nil :eof)
      until (or (member c looking-for) (eq c :eof)) collect c into word
@@ -34,25 +28,25 @@
      finally (return t)))
 
 (defmethod parse-word ((dict dqueue) (word string))
-  (cond ((numeric? word) (parse-integer word :junk-allowed t))
+  (cond ((string= "" word) "")
+	((numeric? word) (parse-integer word :junk-allowed t))
 	(t (multiple-value-bind (wd found?) (lookup dict word)
 	     (unless found? (error (make-instance 'undefined-word)))
 	     wd))))
 
-(defmethod print-word (word) (format t "~s" word))
-(defmethod print-word ((word (eql nil))) (format t "FALSE"))
-(defmethod print-word ((word (eql t))) (format t "TRUE"))
-
 (defmethod eval-word ((dict dqueue) (stack dqueue) (in stream) word)
   (push! word stack))
+
+(defmethod eval-word ((dict dqueue) (stack dqueue) (in stream) (word string))
+  (unless (string= "" word) (call-next-method)))
 
 (defmethod eval-word ((dict dqueue) (stack dqueue) (in stream) (word function))
   (funcall word dict stack in))
 
 (define-primitives
   "bye" (fn () (error (make-instance 'repl-break)))
-  "." (fn (1) (print-word (pop! stack)) (format t "~%"))
-  ".s" (fn () (print-stack stack))
+  "." (fn (1) (print-word (pop! stack)) (ln))
+  ".s" (fn () (print-stack stack) (ln))
   
   "true" t
   "false" nil
@@ -92,8 +86,10 @@
   
   ":" (fn () 
 	(let ((name (pull-word! in))
-	      (words (loop for wd = (pull-word! in) 
-			until (string= wd ";") collect (parse-word dict wd))))
+	      (words (loop for wd = (pull-word! in)   
+			until (string= wd ";") 
+			if (string= wd "\"") collect (pull! #\" in)
+			else collect (parse-word dict wd))))
 	  (intern! dict name (fn () (mapc (lambda (w) (eval-word dict stack in w)) words))))))
 
 (defun repl ()
@@ -101,7 +97,11 @@
     (handler-case 
 	(loop (progn (format t "~~4>> ")
 		     (multiple-value-bind (wd last-char) (pull! (list #\space #\newline) *standard-input*)
-		       (unless (eql last-char :eof)
-			 (eval-word *words* stack *standard-input*
-				    (parse-word *words* wd))))))
+		       (handler-case
+			   (unless (eql last-char :eof)
+			     (eval-word *words* stack *standard-input*
+					(parse-word *words* wd)))
+			 (stack-underflow (e) (print-error :stack-underflow wd stack e))
+			 (unexpected-type (e) (print-error :unexpected-type wd stack e))
+			 (undefined-word (e) (print-error :undefined-word wd stack e))))))
       (repl-break () (format t "Cheers!")))))
